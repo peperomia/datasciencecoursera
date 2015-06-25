@@ -1,0 +1,343 @@
+---
+title: "Applied Logistic Regression. Homework 6"
+output: html_document
+---
+##Exercise One
+
+For this exercise, you will use the ICU dataset (this is the same data we used in weeks 1 through 3). You can download the icu.dta Stata file, or you can also access the data through this CSV file.
+
+From the ICU data, use as the outcome variable vital status (STA) and CPR prior to ICU admission (CPR) as a covariate.
+```{r}
+ICU <- read.delim("C:/Users/Karmen/Desktop/All Things Coursera/current/Applied Logistic Regression/1.week 1/ICU/ICU.txt")
+str(ICU)
+```
+Complete the following:
+
+**a) Demonstrate that the value of the log-odds ratio obtained from the cross-classification of STA by CPR is identical to the estimated slope coefficient from the logistic regression of STA on CPR. Verify that the estimated standard error of the estimated slope coefficient for CPR obtained from the logistic regression package is identical to the square root of the sum of the inverse of the cell frequencies from the cross-classification of STA by CPR. Use either set of computations to obtain 95% CI for the odds ratio. What aspect concerning the coding of the variable CPR makes the calculations for the two methods equivalent?**
+```{r}
+table(ICU$STA)
+table(ICU$STA, ICU$CPR)
+```
+To calculate odds ratio of survival for those patients who received cardio-pulmonary resuscitation prior to ICU admission compared to those who haven't, we can use the $2 \times 2$ table:
+$$
+\begin{array}{|c|c|c|}
+\hline
+\text{}   & \text{CPR = 0 = No} & \text{CPR = 1 = Yes} \\
+\hline
+\text{STA=0=Died}            & 154               & 6 \\
+\hline
+\text{STA=1 Lived}            & 33               & 7 \\
+\hline
+\end{array}$$
+
+$$\widehat{OR}(STA, CPR) = \frac{\frac{Died\ and\ No\ CPR}{Died\ and\ Yes\ CPR}}{\frac{Lived\ and\ No\  CPR}{Lived\ and\ Yes\ CPR}}$$
+$$\widehat{OR}(STA, CPR) = \frac{Died\ and\ No\ CPR)}{(Died\ and\ Yes\ CPR)} \cdot \frac{(Lived\ and\ Yes\ CPR)}{(Lived\ and\ No\  CPR)}$$
+$$\widehat{OR}(STA, CPR) = \frac{154}{6} \cdot \frac{7}{33} = 5.44$$
+It turns out that odds for survival are about 5.4 times greater in those who had CPR prior to admission to intensive care unit than those who hadn't.
+To fit a logistic regression model of STA on CPR 
+```{r}
+logfit1 <- glm(STA ~ CPR, data = ICU, family = binomial(link = "logit"))
+(coefs <- summary(logfit1)$coefficients)
+```
+To obtain odds ratio estimate for CPR we need to exponentiate coefficient for CPR
+```{r}
+(ORcpr <- exp(logfit1$coefficients[2]))
+
+log(ORcpr)
+```
+The odds ratio calculated from coefficient for CPR produced by the software matches the one produced from the table. To calculate confidence interval we need standard error, which can be obtained both from the model output and calulating by hgand. When calculating by hand:
+$$SE(ln(OR(STA, CPR))) = \left[ \frac{1}{a} + \frac{1}{b} +  \frac{1}{c} + \frac{1}{d} \right]^{1/2}$$
+
+**b)For purposes of illustration, use a data transformation statement to recode, for this problem only, the variable CPR as follows: 4 = no and 2 = yes. Perform the logistic regression of STA on CPR (recoded). Demonstrate how the calculation of the logit difference of CPR = yes versus CPR = no is equivalent to the value of the log-odds ratio obtained in exercise 1-a. Use the results from the logistic regression to obtain the 95% CI for the odds ratio and verify that they are the same limits as obtained in Exercise 1-a.**   
+```{r}
+ICU$CPRrecoded <- ifelse(ICU$CPR == 0, 4, 2) 
+head(ICU$CPRrecoded,40)
+head(ICU$CPR, 40)
+logit.recoded <- glm(STA ~ CPRrecoded, data = ICU, family = binomial(link = "logit"))
+(summ.r <- summary(logit.recoded))
+
+predYes <-predict(logit.recoded, newdata = data.frame(CPRrecoded = 2))
+predNo <- predict(logit.recoded, newdata = data.frame(CPRrecoded = 4))
+
+(diff <- predYes - predNo)
+
+coefs
+log(ORcpr);diff
+```
+
+**c) Consider the ICU data and use as the outcome variable vital status (STA) and race (RACE) as a covariate. Prepare a table showing the coding of the two design variables for RACE using the value RACE = 1, white, as the reference group. Show that the estimated log-odds ratios obtained from the cross-classification of STA by RACE, using RACE = 1 as the reference group, are identical to estimated slope coefficients for the two design variables from the logistic regression of STA on RACE. Verify that the estimated standard errors of the estimated slope coefficients for the two design variables for RACE are identical to the square root of the sum of the inverse of the cell frequencies from the cross-classification of STA by RACE used to calculate the odds ratio. Use either set of computations to compute the 95% CI for the odds ratios.** 
+```{r}
+ICU$RACE <- factor(ICU$RACE, levels = c(1,2,3), labels <- c("White", "Black", "Other"))
+logfit3 <- glm(STA ~ RACE, data = ICU, family = binomial(link = "logit"))
+(coefs3 <- summary(logfit3)$coefficients)
+contrasts(ICU$RACE)
+
+table(ICU$RACE, ICU$STA)
+
+(OR.Black <- (138 * 1)/(14 *37))
+(beta.RACEBlack <- log(OR.Black)); coefs3[2,1]
+
+(OR.Other <- (138*2)/(37 * 8))
+(beta.RACEOther <- log(OR.Other)); coefs3[3,1]
+```
+Slopes match.
+```{r}
+(VAR.RACEBlack <- (1/138)+(1/37)+ (1/14)+(1/1))
+(SE.RACEBlack <- sqrt(VAR.RACEBlack))
+coefs3[2,2]
+
+(VAR.RACEOther <- (1/138)+(1/37)+ (1/8)+(1/2))
+(SE.RACEOther <- sqrt(VAR.RACEOther))
+coefs3[3,2]
+```
+Standard errors match.
+```{r}
+#95% Confidence interval for the odds ratios
+(CI.Black <- beta.RACEBlack + c(-1,1) * qnorm(0.975) * SE.RACEBlack)
+(CI.ORBlack <- exp(CI.Black))
+
+(CI.Other <- beta.RACEOther + c(-1,1) * qnorm(0.975) * SE.RACEOther)
+(CI.OROther <- exp(CI.Other))
+```
+
+**d) Create design variables for RACE using the method typically employed in ANOVA. Perform the logistic regression of STA on RACE. Show by calculation that the estimated logit differences of RACE = 2 versus RACE = 1 and RACE = 3 versus RACE = 1 are equivalent to the values of the log-odds ratio obtained in problem 1(c). Use the results of the logistic regression to obtain the 95% CI for the odds ratios and verify that they are the same limits as obtained in Exercise 1(c). Note that the estimated covariance matrix for the estimated coefficients is needed to obtain the estimated variances of the logit differences.**
+```{r}
+#assigning new coding for the dummy variables with contrasts() function
+(recode <- rbind(rep(-1,2), diag(1,2)))
+(contrasts(ICU$RACE) <- recode)
+
+#building model
+logfit.recode <- glm(STA ~ RACE, data = ICU, family = binomial(link = "logit"))
+(summ.recode <- summary(logfit.recode))
+
+#the default coding 
+coefs3
+
+
+(race.W <- predict(logfit.recode, newdata = data.frame(RACE = "White")))
+
+(race.B <- predict(logfit.recode, newdata = data.frame(RACE = "Black")))
+(diff1 <- race.B - race.W)
+
+#values of the log-odds ratio obtained in problem 1(c):
+(OR.Black <- (138 * 1)/(14 *37))
+(beta.RACEBlack <- log(OR.Black)); coefs3[2,1]
+
+
+(race.O <- predict(logfit.recode, newdata = data.frame(RACE = "Other")))
+(diff2 <- race.O - race.W)
+
+#values of the log-odds ratio obtained in problem 1(c):
+(OR.Other <- (138*2)/(37 * 8))
+(beta.RACEOther <- log(OR.Other)); coefs3[3,1]
+```
+The numbers match.
+
+$$diff1 = logit(RACE = Black) - logit(RACE = White)$$
+$$diff1 = \beta_0 + \beta_1*(D_1=1) + \beta_2*(D_2=0) - [\beta_0 + \beta_1*(D_1=-1) + \beta_2 *(D_2=-1) ]$$
+$$diff1 = 2*\beta_1 + \beta_2$$
+Then
+$$Var(diff1) = (2*\beta_1 + \beta_2)(2*\beta_1 + \beta_2)$$
+$$Var(diff1) = 4*\beta_1^2 + \beta_1^2 + 4*\beta_1*\beta_2$$
+$$Var(diff1) = 4*Var(\beta_1) + Var(\beta_1) + 4*Cov(\beta_1*\beta_2)$$
+```{r}
+#95% confidence interval for the odds ratios
+(coefs <- summ.recode$coef)
+
+2*coefs[2,1] + coefs[3,1]; diff1
+
+(vcov.r <- vcov(logfit.recode))
+(Var.diff1 <- 4*vcov.r[2,2] + vcov.r[3,3] + 4*vcov.r[2,3])
+(SE.diff1 <- sqrt(Var.diff1))
+
+(CI.OR.B <- diff1 + c(-1,1) * qnorm(0.975) * SE.diff1)
+
+(exp(CI.OR.B))
+```
+This CI matched the one obtained earlier.
+
+$$diff2 = logit(RACE = Other) - logit(RACE = White)$$
+$$diff2 = \beta_0 + \beta_1(D_1 = 0) + \beta_2(D_2=1) - [\beta_0 + \beta_1(D_1 = (-1)) + \beta_2(D_2 = (-1)]$$
+$$diff2 = \beta_1 + 2*\beta_2$$
+$$Var(diff2) = (\beta_1 + 2*\beta_2) \cdot (\beta_1 + 2*\beta_2)$$
+$$Var(diff2) = \beta_1^2 + 4*\beta_1*\beta_2 + 4*\beta_2^2$$
+$$Var(diff2) = Var(\beta_1) + 4*Cov(\beta_1, \beta_2) + 4*Var(\beta_2)$$
+```{r}
+
+(Var.diff2 <- vcov.r[2,2] + 4 * vcov.r[3,2] + 4 * vcov.r[3,3])
+(SE.diff2 <- sqrt(Var.diff2))
+SE.RACEOther
+
+#calculating confidence interval
+(CI.OR.O <- diff2 + c(-1,1) * qnorm(0.975) * SE.diff2)
+CI.Other
+
+exp(CI.OR.O)
+CI.OROther
+```
+This CI mathed the one (`CI.Other`) obtained earlier.
+
+**e) Consider the logistic regression of STA on CRN and AGE. Consider CRN to be the risk factor and show that AGE is a confounder of the association of CRN with STA. Addition of the interaction of AGE by CRN presents an interesting modeling dilemma. Examine the main effects only and interaction models graphically. Using the graphical results and any significance tests you feel are needed, select the best model (main effects or interaction) and justify your choice. Estimate relevant odds ratios. Repeat this analysis of confounding and interaction for a model that includes CPR as the risk factor and AGE as the potential confounding variable.**  
+```{r}
+logfit.renal <- glm(STA ~ CRN, data = ICU, family = binomial(link = "logit"))
+logfit.renal.age <- glm(STA ~ CRN + AGE, data = ICU, family = binomial(link = "logit"))
+
+(coefs.renal <- summary(logfit.renal)$coefficients)
+
+(coefs.renal.age <- summary(logfit.renal.age)$coefficients)
+
+(change.beta1 <- (coefs.renal.age[2,1] - coefs.renal[2,1])/coefs.renal[2,1])
+```
+$\beta_1$, the coefficient for CRN has decreased by 16.39 % when AGE was included in the model. This suggests that AGE could be a confounder in logistic regression of STA on CRN. 
+```{r}
+logfit.ren.interaction <- glm(STA ~ CRN * AGE, data = ICU, family = binomial(link = "logit"))
+(coefs.ren.interaction <- summary(logfit.ren.interaction)$coefficients)
+
+#to assess slope of the interaction term
+(G.interaction <- logfit.renal.age$deviance - logfit.ren.interaction$deviance)
+
+(df.diff <- logfit.renal.age$df.residual - logfit.ren.interaction$df.residual)
+
+(pValue <- pchisq(G.interaction, df = df.diff, lower.tail = FALSE))
+```
+It seems that AGE is not quite an effect modifier, since slope of the interaction term isn't statistically significant at $\alpha = 0.05$. If we compare on a graph the predicted logit from model with main effects only and those from model with interacton we can see that lines not only are not parallel, they even cross near the end of the AGE range. However, since slope of interaction term by chi square test isn't significantly different from zero, I choose the model with main effects only:
+$$P(y = 1) = \frac{1}{1 + e^{-(\beta_0 + \beta_1*CRN + \beta_2*AGE)}}$$
+```{r}
+library(ggplot2)
+
+ggplot()  + 
+  geom_point(data = ICU, aes(x = AGE, y = predict(logfit.renal.age)), pch = 3, color = "darkgreen")  +
+  geom_point(data = ICU, aes(x = AGE, y = predict(logfit.ren.interaction)), pch = 7, color = "darkred")  +
+  scale_x_continuous(breaks = seq(15,90,10))  +
+  ylab("predicted logit")  +
+  annotate("text", x = 75, y = -2, label = "interaction", color = "darkred")  +
+  annotate("text", x = 75, y = -2.2, label = "main effect", color = "darkgreen")
+
+```
+
+**Now, the CPR model:**
+```{r}
+logfit.cpr.main <- glm(STA ~ CPR + AGE, data = ICU, family = binomial(link = "logit"))
+(coefs.main <- summary(logfit.cpr.main)$coefficients)
+
+logfit.cpr.interaction <- glm(STA ~ CPR * AGE, data = ICU, family = binomial(link = "logit"))
+(coefs.interaction <- summary(logfit.cpr.interaction)$coefficients)
+
+(change.cpr <- (logfit1$coef[2] - coefs.main[2,1] )/logfit1$coef[2])
+```
+It seems that slope for CPR (risk factor) decreases by only about 5 % upon inclusion of AGE into model. That would suggest that AGE is not a significant confounder in logistic regression of STA on CPR.
+```{r}
+#assessing the significance of the slope for interaction term
+(G.cpr <- logfit.cpr.main$deviance - logfit.cpr.interaction$deviance)
+(df.cpr <- logfit.cpr.main$df.residual - logfit.cpr.interaction$df.residual)
+
+(pVal.cpr <- pchisq(G.cpr, df = df.cpr, lower.tail = FALSE))
+```
+p-value from likelihood ratio test of models with and without interaction suggests that AGE isn't an effect modifier on relationship between risk factor CPR and outcome STA. 
+We can make a graph:
+```{r}
+ggplot()  +
+  geom_point(data = ICU, aes(x = AGE, y = predict(logfit.cpr.main)), pch = 5, color = "darkred")  +
+  geom_point(data = ICU, aes(x = AGE, y = predict(logfit.cpr.interaction)), pch = 6, color = "darkgreen")  +
+  ylab("predicted logit")  +
+  annotate("text", x = 25, y = 2.3, label = "main effect", color = "darkred")  +
+  annotate("text", x = 25, y = 2, label = "interaction", color = "darkgreen")
+```   
+
+It seems that the model with main effects only is the one to choose.
+
+**f) Consider an analysis for confounding and interaction for the model with STA as the outcome, CAN as the risk factor, and TYP as the potential confounding variable. Perform this analysis using logistic regression modeling and Mantel-Haenszel analysis. Compare the results of the two approaches.**
+```{r}
+logfit.c.t <-glm(STA ~ CAN + TYP, data = ICU, family = binomial(link = "logit"))
+(coefs.c.t <- summary(logfit.c.t)$coefficients)
+
+logfit.CAN <- glm(STA ~ CAN, data = ICU, family = binomial(link = "logit"))
+(coefs.CAN <- summary(logfit.CAN)$coef)
+
+#assessing whether TYP is a confounder
+(change.CAN <- (coefs.c.t[2] - coefs.CAN[2])/coefs.CAN[2])
+```
+
+This would suggest that TYP is an important confounder.
+Now we'll calculate Mantel-Haenszel estimator: it's a pooled OR for OR's for each stratum of covariate (TYP). Mantel-Haenszel estimator ($OR_{MH}$) is about equal to the exponentiated slope for the risk factor $e^{\beta_{CAN}}$ when the confounder (TYP) is included in the model.
+```{r}
+tbl <- with(ICU, table(STA, CAN, TYP))
+tbl
+(MH <- mantelhaen.test(tbl, correct = FALSE))
+names(MH)
+
+#compare OR calculated using estimate of beta for CAN and pooled Mantel-Haenszel estimator
+exp(logfit.c.t$coef[2]); MH$estimate
+```
+The estimate of slope for $\beta_{CAN}$ when exponentiated yields odds ratio that is very similar to the one calculated by Mantel-Haenszel formula.  
+
+
+###Testing for homogeneity
+First find logit-base estimator, a pooled OR:
+$$\widehat{OR_i} = \frac{a_i \cdot d_i}{b_i \cdot c_i}$$
+```{r}
+elective.0 <- ICU[ICU$TYP == 0, ]
+emergency.1 <- ICU[ICU$TYP == 1, ]
+(elective.tbl <-table(elective.0$STA, elective.0$CAN))
+(emergency.tbl <- with(emergency.1, table(STA,CAN)))
+
+(OR_zero <- (37*1)/(14*1))
+(OR_one <- (107*3)/(2*35))
+```
+Since logit-based estimator is a weighted average of the stratum specific odds ratios, we need to calculate weights, and for that we need variance of each of the stratum specific OR's.
+$$\widehat{Var}[ln(\widehat{OR_i})] = \frac{1}{a_i} +\frac{1}{b_i} +\frac{1}{c_i} + \frac{1}{d_i} $$
+```{r}
+(Var.logOR.zero <-1/37 + 1/14 +1 +1)
+
+(Var.logOR.one <- 1/107 + 1/35 + 1/2 +1/3)
+```
+Then weight for each stratum is inverse of its variance:
+$$w_i = \frac{1}{\widehat{Var}[ln(\widehat{OR_i})]}$$
+
+The logit-based estimator is
+$$OR_L = e^{\sum w_i ln(\widehat{OR_i})/\sum w_i}$$
+```{r}
+(OR.L <- exp((Var.logOR.zero^(-1)*log(OR_zero) + Var.logOR.one^(-1)*log(OR_one))/(Var.logOR.zero^(-1) + Var.logOR.one^(-1))))  #3.90114
+```
+Now to test for homogeneity, we need to find squared deviance of each stratum specific log of odds ratio, then multiply it by its weight, and sum results for the strata. Such result follows $\chi^2$ distribution with degrees of freedom equal to the number of strata minus 1:
+$$\chi_H^2 = \sum \{w_i[ln(OR_i) - ln(OR_L)]^2\}$$ 
+
+This $$\sim \chi^2 (df = \# strata -1)$$
+Since this is a hypothesis test, we need to states hypotheses:
+$$H_0: \widehat{OR_i}\ across\ strata\ are\ constant (homogenous)$$
+$$H_A: \widehat{OR_i}\ across\ strata\ are\ heterogenous(not\ constant)$$
+```{r}
+(chi_H <- (Var.logOR.zero^(-1)*(log(OR_zero) - log(OR.L))^2 + Var.logOR.one^(-1)*(log(OR_one) - log(OR.L))^2))
+
+df.chi_H = 1
+
+(pValue <- pchisq(chi_H, df = df.chi_H, lower.tail = FALSE))
+```
+It turns out that p-value from this test is not significant to reject the null hypothesis. Hence we conclude that odds ratios of survival depending on whether a malignant neoplastic disease is part of the present problem across strata of type of admission into hospital, elective or emergency are homogenous. 
+This was calculated by hand. However, we can obtain something similar to this using the output of our logistic regression. To test for homogeneity of odds ratios we buld model with interaction and compare it to model without interaction using likelihood ratio test
+```{r}
+#Building an interaction term
+logfit.c.t.interaction <- glm(STA ~ CAN * TYP, data = ICU, family = binomial(link = "logit"))
+(coefs.c.t.interaction <- summary(logfit.c.t.interaction))  
+
+(LR <- logfit.c.t$deviance - logfit.c.t.interaction$deviance)
+
+(df.LR <- logfit.c.t$df.residual - logfit.c.t.interaction$df.residual)
+```
+This value is very similar to the $\chi_H^2$ calculated above and have the same degrees of freedom. Since likelihood ratio follows $\chi^2$ distribution with degrees of freedom the difference in degrees of freedom of its respective models, we get p-value that is very similar to the one calculated by hand:
+```{r}
+(pVal.LR <- pchisq(LR, df.LR, lower.tail = FALSE))
+```
+Likelihood ratio test tests for the significance of the slope of the interaction term here, since this is the thing where these two models differ. Since the p-value wasn't less than customary $\alpha = 0.5$
+we conclude that there isn't much difference between models with and without interaction term, and the parsimonious model is better, we choose the model witmain effects only, no interacton term. That means that type of admission is a confounder but not an effect modifier.   
+
+
+
+
+
+
+
+
+
+
+
